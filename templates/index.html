@@ -29,6 +29,38 @@
             border-radius: 4px;
             border: 1px solid #dee2e6;
         }
+        .schema-list {
+            margin: 20px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .schema-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .schema-item:hover {
+            background-color: #e9ecef;
+        }
+        .schema-name {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .remove-schema {
+            color: #dc3545;
+            cursor: pointer;
+            padding: 5px 10px;
+            border: none;
+            background: none;
+        }
+        .remove-schema:hover {
+            color: #c82333;
+        }
         .file-input {
             margin: 10px 0;
         }
@@ -80,79 +112,141 @@
             text-align: center;
             color: #666;
         }
-        .file-info {
-            margin-top: 5px;
-            font-size: 0.9em;
-            color: #666;
-        }
-        label {
-            font-weight: bold;
-            color: #333;
-        }
-        .required {
-            color: #dc3545;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>XML Schema Validator</h1>
-        <div class="upload-form">
-            <form id="uploadForm">
-                <div class="file-section">
-                    <div class="file-input">
-                        <label for="schema_file">XML Schema (XSD) <span class="required">*</span></label><br>
-                        <input type="file" id="schema_file" name="schema_file" accept=".xsd" required>
-                        <div class="file-info">Upload your XML Schema (.xsd) file</div>
-                    </div>
-                </div>
 
-                <div class="file-section">
-                    <div class="file-input">
-                        <label for="xml_file">XML File <span class="required">*</span></label><br>
-                        <input type="file" id="xml_file" name="xml_file" accept=".xml" required>
-                        <div class="file-info">Upload your XML file to validate</div>
-                    </div>
+        <!-- Schema Upload Section -->
+        <div class="file-section">
+            <h3>Upload Schema</h3>
+            <form id="schemaUploadForm">
+                <div class="file-input">
+                    <input type="file" id="schema_file" name="schema_file" accept=".xsd" required>
                 </div>
+                <button type="submit" class="submit-btn">Upload Schema</button>
+            </form>
+        </div>
 
-                <button type="submit" class="submit-btn" id="submitBtn" disabled>
-                    Validate XML against Schema
-                </button>
+        <!-- Schema List -->
+        <div class="schema-list">
+            <h3>Available Schemas</h3>
+            <div id="schemaList">
+                {% for schema_id, schema in schemas.items() %}
+                <div class="schema-item" data-schema-id="{{ schema_id }}">
+                    <input type="radio" name="schema_id" value="{{ schema_id }}" id="schema_{{ schema_id }}">
+                    <label class="schema-name" for="schema_{{ schema_id }}">{{ schema.name }}</label>
+                    <button class="remove-schema" onclick="removeSchema('{{ schema_id }}')">×</button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- XML Validation Section -->
+        <div class="file-section">
+            <h3>Validate XML</h3>
+            <form id="validationForm">
+                <div class="file-input">
+                    <input type="file" id="xml_file" name="xml_file" accept=".xml" required>
+                </div>
+                <button type="submit" class="submit-btn" id="validateBtn" disabled>Validate XML</button>
             </form>
         </div>
 
         <div id="loading" class="loading">
-            <div>Validating... Please wait...</div>
+            Processing... Please wait...
         </div>
 
         <div id="result"></div>
     </div>
 
     <script>
-        const form = document.getElementById('uploadForm');
-        const submitBtn = document.getElementById('submitBtn');
-        const xmlInput = document.getElementById('xml_file');
-        const schemaInput = document.getElementById('schema_file');
+        const schemaUploadForm = document.getElementById('schemaUploadForm');
+        const validationForm = document.getElementById('validationForm');
+        const validateBtn = document.getElementById('validateBtn');
+        const schemaList = document.getElementById('schemaList');
 
-        // Enable/disable submit button based on file selection
-        function updateSubmitButton() {
-            submitBtn.disabled = !(xmlInput.files.length && schemaInput.files.length);
+        // Upload Schema
+        schemaUploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch('/upload-schema', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Add new schema to list
+                    const schemaItem = document.createElement('div');
+                    schemaItem.className = 'schema-item';
+                    schemaItem.dataset.schemaId = data.schema_id;
+                    schemaItem.innerHTML = `
+                        <input type="radio" name="schema_id" value="${data.schema_id}" id="schema_${data.schema_id}">
+                        <label class="schema-name" for="schema_${data.schema_id}">${data.schema_name}</label>
+                        <button class="remove-schema" onclick="removeSchema('${data.schema_id}')">×</button>
+                    `;
+                    schemaList.appendChild(schemaItem);
+                    schemaUploadForm.reset();
+                    updateValidateButton();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('Error uploading schema');
+            }
+        });
+
+        // Remove Schema
+        async function removeSchema(schemaId) {
+            try {
+                const response = await fetch(`/remove-schema/${schemaId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const schemaItem = document.querySelector(`.schema-item[data-schema-id="${schemaId}"]`);
+                    if (schemaItem) {
+                        schemaItem.remove();
+                        updateValidateButton();
+                    }
+                }
+            } catch (error) {
+                alert('Error removing schema');
+            }
         }
 
-        xmlInput.addEventListener('change', updateSubmitButton);
-        schemaInput.addEventListener('change', updateSubmitButton);
+        // Update Validate Button State
+        function updateValidateButton() {
+            const xmlFile = document.getElementById('xml_file').files.length > 0;
+            const schemaSelected = document.querySelector('input[name="schema_id"]:checked') !== null;
+            validateBtn.disabled = !(xmlFile && schemaSelected);
+        }
 
-        form.addEventListener('submit', async (e) => {
+        // Listen for changes
+        document.getElementById('xml_file').addEventListener('change', updateValidateButton);
+        schemaList.addEventListener('change', updateValidateButton);
+
+        // Validate XML
+        validationForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const formData = new FormData(e.target);
+            const formData = new FormData();
+            formData.append('xml_file', document.getElementById('xml_file').files[0]);
+            formData.append('schema_id', document.querySelector('input[name="schema_id"]:checked').value);
+
             const resultDiv = document.getElementById('result');
             const loadingDiv = document.getElementById('loading');
 
-            // Show loading, hide previous result
             loadingDiv.style.display = 'block';
             resultDiv.style.display = 'none';
-            submitBtn.disabled = true;
+            validateBtn.disabled = true;
 
             try {
                 const response = await fetch('/validate', {
@@ -182,16 +276,11 @@
                     <div class="error">Failed to validate XML. Please try again.</div>
                 `;
             } finally {
-                // Hide loading and show result
                 loadingDiv.style.display = 'none';
                 resultDiv.style.display = 'block';
-                submitBtn.disabled = false;
-
-                // Reset file inputs if validation was successful
-                if (data && data.success && data.isValid) {
-                    form.reset();
-                    updateSubmitButton();
-                }
+                validateBtn.disabled = false;
+                validationForm.reset();
+                updateValidateButton();
             }
         });
     </script>
