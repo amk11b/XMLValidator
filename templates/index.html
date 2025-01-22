@@ -1,0 +1,199 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML Schema Validator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .upload-form {
+            margin-bottom: 20px;
+        }
+        .file-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .file-input {
+            margin: 10px 0;
+        }
+        .submit-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        .submit-btn:hover {
+            background-color: #45a049;
+        }
+        .submit-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .valid {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .invalid {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .error {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+            color: #666;
+        }
+        .file-info {
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        label {
+            font-weight: bold;
+            color: #333;
+        }
+        .required {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XML Schema Validator</h1>
+        <div class="upload-form">
+            <form id="uploadForm">
+                <div class="file-section">
+                    <div class="file-input">
+                        <label for="schema_file">XML Schema (XSD) <span class="required">*</span></label><br>
+                        <input type="file" id="schema_file" name="schema_file" accept=".xsd" required>
+                        <div class="file-info">Upload your XML Schema (.xsd) file</div>
+                    </div>
+                </div>
+
+                <div class="file-section">
+                    <div class="file-input">
+                        <label for="xml_file">XML File <span class="required">*</span></label><br>
+                        <input type="file" id="xml_file" name="xml_file" accept=".xml" required>
+                        <div class="file-info">Upload your XML file to validate</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                    Validate XML against Schema
+                </button>
+            </form>
+        </div>
+
+        <div id="loading" class="loading">
+            <div>Validating... Please wait...</div>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const xmlInput = document.getElementById('xml_file');
+        const schemaInput = document.getElementById('schema_file');
+
+        // Enable/disable submit button based on file selection
+        function updateSubmitButton() {
+            submitBtn.disabled = !(xmlInput.files.length && schemaInput.files.length);
+        }
+
+        xmlInput.addEventListener('change', updateSubmitButton);
+        schemaInput.addEventListener('change', updateSubmitButton);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            const resultDiv = document.getElementById('result');
+            const loadingDiv = document.getElementById('loading');
+
+            // Show loading, hide previous result
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch('/validate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = data.isValid ? 'valid' : 'invalid';
+                    resultDiv.innerHTML = `
+                        <strong>${data.isValid ? '✓ Success:' : '✗ Validation Failed:'}</strong>
+                        <div class="error">${data.message}</div>
+                    `;
+                } else {
+                    resultDiv.className = 'invalid';
+                    resultDiv.innerHTML = `
+                        <strong>✗ Error:</strong>
+                        <div class="error">${data.message}</div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'invalid';
+                resultDiv.innerHTML = `
+                    <strong>✗ Error:</strong>
+                    <div class="error">Failed to validate XML. Please try again.</div>
+                `;
+            } finally {
+                // Hide loading and show result
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                submitBtn.disabled = false;
+
+                // Reset file inputs if validation was successful
+                if (data && data.success && data.isValid) {
+                    form.reset();
+                    updateSubmitButton();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
